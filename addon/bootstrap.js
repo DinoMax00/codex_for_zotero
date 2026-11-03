@@ -5,7 +5,7 @@ function uninstall() {}
 async function startup({ id, version, rootURI, resourceURI }) {
   await Zotero.initializationPromise;
   rootURI ||= resourceURI.spec;
-  Components.utils.importGlobalProperties(['IOUtils', 'PathUtils']);
+  Components.utils.importGlobalProperties(['IOUtils', 'PathUtils', 'URL']);
   chromeHandle = Components.classes['@mozilla.org/addons/addon-manager-startup;1']
     .getService(Components.interfaces.amIAddonManagerStartup)
     .registerChrome(Services.io.newURI(rootURI + 'manifest.json'), [
@@ -18,6 +18,7 @@ async function startup({ id, version, rootURI, resourceURI }) {
     ChromeUtils,
     IOUtils,
     PathUtils,
+    URL,
     Cc: Components.classes,
     Ci: Components.interfaces,
     rootURI,

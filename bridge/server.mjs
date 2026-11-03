@@ -23,6 +23,16 @@ export async function createBridge(config) {
     res.end(JSON.stringify(value));
   }
   const server = http.createServer(async (req, res) => {
+    const mediaTicket = /^\/media\/([a-f0-9]{48})$/.exec(req.url || '');
+    if (
+      mediaTicket &&
+      ['GET', 'HEAD'].includes(req.method) &&
+      ['127.0.0.1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) &&
+      /^127\.0\.0\.1:\d+$/.test(req.headers.host || '')
+    ) {
+      await store.media.serve(mediaTicket[1], req, res);
+      return;
+    }
     const supplied = req.headers.authorization?.replace(/^Bearer /, '') || '';
     if (
       req.headers.origin ||
@@ -37,7 +47,7 @@ export async function createBridge(config) {
       if (req.method === 'GET' && url.pathname === '/health')
         return json(res, 200, {
           ok: true,
-          version: config.version || '0.6.0',
+          version: config.version || '0.7.1',
           pid: process.pid,
           projectRoot: store.projectRoot,
         });
@@ -53,17 +63,27 @@ export async function createBridge(config) {
       if (req.method !== 'POST') return json(res, 404, { error: '未知请求' });
       if (!req.headers['content-type']?.startsWith('application/json'))
         return json(res, 415, { error: '需要 JSON 请求' });
-      let body = '';
+      const chunks = [];
+      let bodyBytes = 0;
+      const bodyLimit = url.pathname === '/images/stage' ? 29 * 1024 * 1024 : 1000000;
       for await (const chunk of req) {
-        body += chunk;
-        if (body.length > 1000000) {
+        bodyBytes += chunk.length;
+        chunks.push(chunk);
+        if (bodyBytes > bodyLimit) {
           json(res, 413, { error: '请求过大' });
           return;
         }
       }
-      const p = JSON.parse(body);
+      const p = JSON.parse(Buffer.concat(chunks).toString('utf8'));
       let data;
       switch (url.pathname) {
+        case '/images/stage':
+          data = await store.media.stage(p);
+          break;
+        case '/media/prepare':
+          service.own(p.threadId);
+          data = await store.media.register(p.path);
+          break;
         case '/paper':
           data = await service.list(p.paper);
           break;
@@ -109,7 +129,7 @@ export async function createBridge(config) {
     url: `http://127.0.0.1:${server.address().port}`,
     token,
     pid: process.pid,
-    version: config.version || '0.6.0',
+    version: config.version || '0.7.1',
   };
   let closed = false;
   async function close() {

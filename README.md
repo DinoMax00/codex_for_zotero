@@ -13,6 +13,8 @@ Codex for Zotero adds a minimal chat panel to Zotero's right sidebar. It forward
 ## Features
 
 - **Paper-aware chat.** The first message includes a reference to a local copy of the current PDF. Follow-up messages reuse the same native Codex chat.
+- **Image input.** Choose, paste, or drop PNG/JPEG/GIF/WebP images; preview or remove them before sending. Image-only messages and image history are supported. Up to 8 images per message, 20 MB per image, and 50 MB total.
+- **Media replies.** Display images inline with an expanded view; play MP4/WebM/MOV videos with controls and seeking, subject to Zotero/browser codec support. Remote media loads only when clicked; video platform pages remain ordinary links.
 - **Model selection.** Choose from the models exposed by your installed Codex.
 - **Native sessions.** Keep paper chats under a configurable `paper reading` working directory; switch history per paper and open the chat in Codex.
 - **Focused interface.** `Enter` sends; `Shift + Enter` adds a line. IME composition is respected. The title can be renamed with a double-click or `F2`.
@@ -43,6 +45,8 @@ This plugin uses experimental Codex App Server APIs. Compatibility with every Co
 3. Install Node.js and install/sign in to Codex if needed. Open a PDF in Zotero, then click the book/terminal icon in the right sidebar.
 4. If automatic discovery fails, use the sidebar's **⋯ → 连接设置** menu to set the absolute Node.js path, Codex executable path, and paper-reading working directory. Reconnect afterward.
 5. Install the skills below to enable annotation and library management. Basic chat works without them.
+
+Use the **+** button beside the model selector to attach images, paste a screenshot into the input, or drop files onto the panel. Images are sent through native Codex `localImage` inputs. Model/provider image support is still required. Native generated images are shown when Codex supplies inline data or a saved file in the working directory; file-ID-only results offer a notice to continue in Codex. Reply media can use `![description](media-path)` or a link to an image/video file. Local media must be inside the configured working directory; Codex is told to save displayable output there.
 
 The bridge starts automatically; no separate terminal process is needed. It looks for the desktop-bundled Codex before common standalone CLI locations. Node.js discovery checks common Homebrew/system locations; version-manager installations may need an explicit path.
 
@@ -82,18 +86,19 @@ Existing collection memberships and metadata are preserved. Local PDFs are copie
 
 The plugin adds no telemetry or developer-operated chat service. It does not bundle credentials, papers, library databases, screenshots, or chat transcripts.
 
-| Data                       | Location / behavior                                                                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Native chat history        | Managed by Codex itself through App Server; the plugin does not edit Codex's database or session files.                                                                        |
-| Default working directory  | `~/Documents/ChatGPT/paper reading`; configurable. Using this directory groups native chats by working directory; the plugin does not create or modify Codex sidebar projects. |
-| Paper copies               | `<working-directory>/zotero-papers/<libraryID-attachmentKey>/<threadID>/`; includes a `paper.json` mapping. The original Zotero PDF is unchanged.                              |
-| Plugin state               | `<Zotero-profile>/codex-for-zotero/`; contains connection settings, private credentials, paper-to-chat associations, and invisible annotation deduplication metadata.          |
-| Skill connection discovery | `~/.local/state/codex/zotero-paper-annotator/bridge.json`; private credentials with mode `0600`. Never publish this file.                                                      |
-| Highlights and comments    | Native Zotero annotations. Group-library or sync settings can make them visible to collaborators. Author and automation tags are left blank.                                   |
+| Data                       | Location / behavior                                                                                                                                                                                                                            |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Native chat history        | Managed by Codex itself through App Server; the plugin does not edit Codex's database or session files.                                                                                                                                        |
+| Default working directory  | `~/Documents/ChatGPT/paper reading`; configurable. Using this directory groups native chats by working directory; the plugin does not create or modify Codex sidebar projects.                                                                 |
+| Paper copies               | `<working-directory>/zotero-papers/<libraryID-attachmentKey>/<threadID>/`; includes a `paper.json` mapping. The original Zotero PDF is unchanged.                                                                                              |
+| Image copies               | `<working-directory>/zotero-images/`; private persistent snapshots used by native image inputs and history. Removing a draft thumbnail removes it from the next message; it does not erase an already staged file or a native chat attachment. |
+| Plugin state               | `<Zotero-profile>/codex-for-zotero/`; contains connection settings, private credentials, paper-to-chat associations, and invisible annotation deduplication metadata.                                                                          |
+| Skill connection discovery | `~/.local/state/codex/zotero-paper-annotator/bridge.json`; private credentials with mode `0600`. Never publish this file.                                                                                                                      |
+| Highlights and comments    | Native Zotero annotations. Group-library or sync settings can make them visible to collaborators. Author and automation tags are left blank.                                                                                                   |
 
-The chat sidecar listens on a random `127.0.0.1` port and requires a random bearer token; it rejects browser origins and unexpected hosts. The annotation/library endpoints run on Zotero's local server, require a separate private token and matching Zotero instance ID, and accept only defined operations. They do not evaluate caller-supplied JavaScript. Unsupported native approval requests are not automatically accepted.
+The chat sidecar listens on a random `127.0.0.1` port. Control/upload requests require a random bearer token and reject browser origins and unexpected hosts. Media elements receive unguessable, per-file URLs valid for 24 hours within the running bridge; these URLs cannot authorize other operations. Output reads verify file signatures and resolved paths within the working directory, including symlink checks. Video is streamed with byte-range support instead of being embedded into chat JSON. Treat media URLs as private while valid. The annotation/library endpoints run on Zotero's local server, require a separate private token and matching Zotero instance ID, and accept only defined operations. They do not evaluate caller-supplied JavaScript. Unsupported native approval requests are not automatically accepted.
 
-Native Codex sessions still retain their normal tool/progress history even when the sidebar hides transient progress. Uninstalling the plugin does not delete chats, PDF copies, Zotero annotations, or skill directories. Review [SECURITY.md](SECURITY.md) before sharing logs or state files.
+Native Codex sessions still retain their normal tool/progress history even when the sidebar hides transient progress. Uninstalling the plugin does not delete chats, PDF/image copies, Zotero annotations, or skill directories. Review [SECURITY.md](SECURITY.md) before sharing logs or state files.
 
 ## Development
 

@@ -1,4 +1,5 @@
-import { marked } from 'marked';
+import { mediaReference } from './media-protocol.mjs';
+import { Marked } from 'marked';
 import katex from 'katex';
 
 // Keep local citation data separate from HTML so Markdown cannot alter a path.
@@ -33,7 +34,8 @@ export function parseFileCitation(raw) {
 // Protect math and citations before Markdown consumes escapes; leave code literal.
 export function markdownWithMath(text) {
   const formulae = [],
-    citations = [];
+    citations = [],
+    media = [];
   const pattern =
     /(?<fence>`{3,}|~{3,})[^\n]*\n[\s\S]*?\k<fence>|(?<code>`+)[^\n]*?\k<code>|(?<citation>:codex-file-citation\{(?:[^"'{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*')*\})|(?<pending>:codex-file-citation(?:\{[^\n]*)?$)|\\\[(?<bracket>[\s\S]*?)\\\]|\\\((?<paren>[\s\S]*?)\\\)|\$\$(?<double>[\s\S]*?)\$\$|(?<![\\\w])\$(?!\s)(?<single>[^$\n]+?)(?<!\s)\$(?!\d)/g;
   const prefix = `CFZINLINE${Math.random().toString(36).slice(2)}X`;
@@ -66,13 +68,32 @@ export function markdownWithMath(text) {
     });
     return display ? `\n\n${token}\n\n` : token;
   });
-  return { html: marked.parse(protectedText, { gfm: true, breaks: false }), formulae, citations };
+  const embed = (href, label, imageSyntax) => {
+    const reference = mediaReference(href, label, imageSyntax);
+    if (!reference) return imageSyntax ? '[不支持的图片]' : false;
+    const token = `${prefix}V${media.length}END`;
+    media.push({ token, ...reference });
+    return token;
+  };
+  const parser = new Marked();
+  parser.use({
+    renderer: {
+      image({ href, text }) {
+        return embed(href, text, true);
+      },
+      link({ href, text }) {
+        return embed(href, text, false);
+      },
+    },
+  });
+  const html = parser.parse(protectedText, { gfm: true, breaks: false });
+  return { html, formulae, citations, media };
 }
 export function visibleTurnItems(turn) {
   const items = turn.items || [];
   if (turn.status === 'inProgress')
     return items.filter((i) =>
-      ['userMessage', 'agentMessage', 'reasoning', 'plan'].includes(i.type),
+      ['userMessage', 'agentMessage', 'reasoning', 'plan', 'imageGeneration'].includes(i.type),
     );
   const agents = items.filter((i) => i.type === 'agentMessage' && i.phase !== 'commentary');
   const hasFinal = agents.some((i) => i.phase === 'final_answer');
@@ -80,6 +101,7 @@ export function visibleTurnItems(turn) {
   return items.filter(
     (i) =>
       i.type === 'userMessage' ||
+      (i.type === 'imageGeneration' && i.status === 'completed') ||
       (i.type === 'agentMessage' &&
         (i.phase === 'final_answer' ||
           i.phase === 'partial_answer' ||

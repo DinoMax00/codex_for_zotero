@@ -1,3 +1,4 @@
+import { userImages, mediaReference } from './media-protocol.mjs';
 import { markdownWithMath, visibleTurnItems } from './presentation.mjs';
 import { AnnotationBridge } from './annotation-bridge.js';
 import createDOMPurify from 'dompurify';
@@ -52,7 +53,7 @@ class Bridge {
     } catch {}
     const serviceDir = PathUtils.join(this.dir, `service-${pluginVersion}`);
     await IOUtils.makeDirectory(serviceDir, { ignoreExisting: true });
-    for (const name of ['server.mjs', 'rpc.mjs', 'store.mjs', 'service.mjs']) {
+    for (const name of ['server.mjs', 'rpc.mjs', 'store.mjs', 'service.mjs', 'media.mjs']) {
       const source = await resourceText('bridge/' + name);
       await IOUtils.writeUTF8(PathUtils.join(serviceDir, name), source, { permissions: 0o600 });
     }
@@ -245,6 +246,8 @@ class ChatPanel {
     this.cursor = 0;
     this.threadId = null;
     this.messages = new Map();
+    this.pendingImages = [];
+    this.uploading = 0;
     this.running = false;
     this.sending = false;
     this.disposed = false;
@@ -342,6 +345,45 @@ class ChatPanel {
         this.send();
       }
     });
+    this.attachments = element(d, 'div', 'cfz-attachments');
+    this.attachments.hidden = true;
+    this.fileInput = element(d, 'input');
+    this.fileInput.type = 'file';
+    this.fileInput.accept = 'image/png,image/jpeg,image/webp,image/gif';
+    this.fileInput.multiple = true;
+    this.fileInput.hidden = true;
+    this.fileInput.addEventListener('change', () => {
+      this.addImages(Array.from(this.fileInput.files || []));
+      this.fileInput.value = '';
+    });
+    this.imageButton = button(d, '+', 'cfz-image-button', () => this.fileInput.click());
+    this.imageButton.title = '添加图片，也可粘贴或拖入';
+    this.imageButton.setAttribute('aria-label', '添加图片');
+    this.input.addEventListener('paste', (e) => {
+      const files = Array.from(e.clipboardData?.items || [])
+        .filter((item) => item.kind === 'file' && item.type.startsWith('image/'))
+        .map((item) => item.getAsFile())
+        .filter(Boolean);
+      if (files.length) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.addImages(files);
+      }
+    });
+    this.root.addEventListener('dragover', (e) => {
+      if (Array.from(e.dataTransfer?.types || []).includes('Files')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    });
+    this.root.addEventListener('drop', (e) => {
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.addImages(files);
+      }
+    });
     const actions = element(d, 'div', 'cfz-actions');
     this.models = element(d, 'select', 'cfz-models');
     this.models.setAttribute('aria-label', '选择 Codex 模型');
@@ -364,9 +406,9 @@ class ChatPanel {
     this.stopButton.setAttribute('aria-label', '停止回复');
     this.stopButton.hidden = true;
     const tools = element(d, 'div', 'cfz-composer-tools');
-    tools.append(this.models, this.annotateButton);
+    tools.append(this.imageButton, this.models, this.annotateButton);
     actions.append(tools, this.stopButton, this.sendButton);
-    composer.append(this.input, actions);
+    composer.append(this.attachments, this.input, actions, this.fileInput);
     this.status = element(d, 'div', 'cfz-status');
     this.status.setAttribute('role', 'status');
     this.status.hidden = true;
@@ -451,6 +493,8 @@ class ChatPanel {
     this.sendButton.disabled = value || this.sending || !this.paper;
     this.annotateButton.disabled = value || this.sending || !this.paper;
     this.input.disabled = this.sending;
+    this.imageButton.disabled = this.sending || !this.paper;
+    if (this.uploading) this.sendButton.disabled = true;
   }
   refreshHeader() {
     const title = this.session?.completedOnce ? this.session.title : '';
@@ -539,6 +583,7 @@ class ChatPanel {
       const paper = await resolvePaper(item, this.doc);
       if (generation !== this.generation || this.disposed) return;
       const same = this.key === `${paper.libraryID}-${paper.attachmentKey}`;
+      if (!same) this.clearImages();
       this.paper = paper;
       this.key = `${paper.libraryID}-${paper.attachmentKey}`;
       this.paperLabel.textContent = paper.title;
@@ -648,10 +693,30 @@ class ChatPanel {
     this.log.prepend(b);
   }
   markdown(target, text) {
-    const { html, formulae, citations } = markdownWithMath(text);
+    const { html, formulae, citations, media } = markdownWithMath(text);
+    const existingMedia = new Map(
+      Array.from(target.querySelectorAll('[data-cfz-media]')).map((node) => [
+        node.dataset.cfzMedia,
+        node,
+      ]),
+    );
     const fragment = this.purify.sanitize(html, {
       RETURN_DOM_FRAGMENT: true,
-      FORBID_TAGS: ['img', 'style', 'form', 'input', 'button', 'iframe', 'svg', 'math'],
+      FORBID_TAGS: [
+        'img',
+        'video',
+        'audio',
+        'source',
+        'object',
+        'embed',
+        'style',
+        'form',
+        'input',
+        'button',
+        'iframe',
+        'svg',
+        'math',
+      ],
       FORBID_ATTR: ['style'],
       ALLOW_UNKNOWN_PROTOCOLS: false,
     });
@@ -660,6 +725,7 @@ class ChatPanel {
     const embedded = [
       ...formulae.map((f) => ({ ...f, kind: 'math' })),
       ...citations.map((c) => ({ ...c, kind: 'citation' })),
+      ...media.map((c) => ({ ...c, mediaKind: c.kind, kind: 'media' })),
     ];
     if (embedded.length) {
       const walker = this.doc.createTreeWalker(target, this.win.NodeFilter.SHOW_TEXT);
@@ -685,7 +751,12 @@ class ChatPanel {
             break;
           }
           replacement.appendChild(this.doc.createTextNode(rest.slice(0, index)));
-          if (found.kind === 'citation') replacement.appendChild(this.citationButton(found));
+          if (found.kind === 'media')
+            replacement.appendChild(
+              existingMedia.get(found.source) ||
+                this.mediaNode({ ...found, kind: found.mediaKind }),
+            );
+          else if (found.kind === 'citation') replacement.appendChild(this.citationButton(found));
           else {
             const wrap = element(
               this.doc,
@@ -783,10 +854,38 @@ class ChatPanel {
     Zotero.launchFile(citation.path);
   }
   updateItem(it, turnId) {
-    if (!it || !it.id || !['agentMessage', 'userMessage', 'plan', 'reasoning'].includes(it.type))
+    if (
+      !it ||
+      !it.id ||
+      !['agentMessage', 'userMessage', 'plan', 'reasoning', 'imageGeneration'].includes(it.type)
+    )
       return;
-    const text = it.type === 'reasoning' ? (it.summary || []).join('\n\n') : textOf(it);
-    if ((it.type === 'userMessage' || it.type === 'reasoning') && !text) return;
+    let text =
+      it.type === 'reasoning'
+        ? (it.summary || []).join('\n\n')
+        : it.type === 'imageGeneration'
+          ? ''
+          : textOf(it);
+    const images =
+      it.type === 'userMessage'
+        ? userImages(it)
+        : it.type === 'imageGeneration' && it.status === 'completed'
+          ? userImages({
+              content: [
+                it.savedPath
+                  ? { type: 'localImage', path: it.savedPath }
+                  : {
+                      type: 'image',
+                      url: it.result?.startsWith('data:')
+                        ? it.result
+                        : 'data:image/png;base64,' + (it.result || ''),
+                    },
+              ],
+            })
+          : [];
+    if (it.type === 'imageGeneration' && it.status === 'completed' && !images.length)
+      text = '图片已生成，但 Codex 未提供可展示的本地文件。请从菜单在 Codex 中打开。';
+    if ((it.type === 'userMessage' || it.type === 'reasoning') && !text && !images.length) return;
     const wasBottom = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80;
     let m = this.messages.get(it.id);
     if (!m) {
@@ -806,8 +905,14 @@ class ChatPanel {
     m.node.classList.toggle('cfz-transient', transient);
     m.label.textContent =
       it.type === 'reasoning' ? '思考摘要' : it.type === 'plan' ? '计划' : '进度';
-    if (it.type === 'userMessage') m.content.textContent = m.text;
-    else this.markdown(m.content, m.text);
+    const signature = JSON.stringify([m.text, images]);
+    if (m.signature !== signature) {
+      m.signature = signature;
+      if (it.type === 'userMessage' || it.type === 'imageGeneration') {
+        m.content.replaceChildren(this.doc.createTextNode(m.text));
+        for (const image of images) m.content.appendChild(this.mediaNode(image));
+      } else this.markdown(m.content, m.text);
+    }
     if (wasBottom) this.scrollBottom();
     return m.node;
   }
@@ -888,6 +993,147 @@ class ChatPanel {
     if (gen === this.generation && !this.disposed)
       this.timer = this.win.setTimeout(() => this.poll(gen), this.running ? 300 : 1500);
   }
+  clearImages() {
+    this.pendingImages = [];
+    this.renderImages();
+  }
+  renderImages() {
+    this.attachments.replaceChildren();
+    this.attachments.hidden = !this.pendingImages.length;
+    for (const image of this.pendingImages) {
+      const tile = element(this.doc, 'div', 'cfz-attachment');
+      const img = element(this.doc, 'img');
+      img.src = bridge.connection.url + image.route;
+      img.alt = image.name;
+      const remove = button(this.doc, '×', 'cfz-remove-image', () => {
+        if (this.sending) return;
+        this.pendingImages = this.pendingImages.filter((value) => value.id !== image.id);
+        this.renderImages();
+      });
+      remove.title = '移除图片';
+      remove.setAttribute('aria-label', '移除 ' + image.name);
+      tile.append(img, remove);
+      this.attachments.appendChild(tile);
+    }
+  }
+  async addImages(files) {
+    if (this.sending || !this.paper) return;
+    if (this.pendingImages.length + this.uploading + files.length > 8) {
+      this.statusText('每条消息最多 8 张图片', true);
+      return;
+    }
+    const key = this.key;
+    this.uploading += files.length;
+    this.setRunning(this.running);
+    for (const file of files) {
+      try {
+        if (file.size > 20 * 1024 * 1024) throw new Error('每张图片不能超过 20 MB');
+        const dataURL = await new Promise((resolve, reject) => {
+          const reader = new this.win.FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('无法读取图片'));
+          reader.readAsDataURL(file);
+        });
+        const image = await bridge.request('/images/stage', { name: file.name, dataURL });
+        if (!this.disposed && key === this.key) {
+          this.pendingImages.push(image);
+          this.renderImages();
+        }
+      } catch (error) {
+        if (key === this.key) this.statusText(error.message, true);
+      } finally {
+        this.uploading--;
+        this.setRunning(this.running);
+      }
+    }
+  }
+  mediaNode(reference) {
+    const box = element(this.doc, 'span', 'cfz-media');
+    box.dataset.cfzMedia = reference.source;
+    const load = async () => {
+      const follow = this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80;
+      const previousTop = this.log.scrollTop;
+      trigger.disabled = true;
+      try {
+        let url = reference.source;
+        if (!reference.remote && !reference.inline) {
+          const result = await bridge.request('/media/prepare', {
+            threadId: this.threadId,
+            path: reference.source,
+          });
+          if (result.kind !== reference.kind) throw new Error('媒体格式与引用不一致');
+          url = bridge.connection.url + result.route;
+        }
+        const media = element(this.doc, reference.kind === 'video' ? 'video' : 'img');
+        media.referrerPolicy = 'no-referrer';
+        if (reference.kind === 'video') {
+          media.controls = true;
+          media.preload = 'metadata';
+          media.playsInline = true;
+        } else {
+          media.alt = reference.label;
+          media.loading = 'lazy';
+        }
+        media.addEventListener('load', () => {
+          if (
+            (follow && this.log.scrollTop >= previousTop) ||
+            this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80
+          )
+            this.scrollBottom();
+        });
+        media.addEventListener(
+          'error',
+          () => {
+            box.replaceChildren(trigger);
+            trigger.disabled = false;
+            trigger.textContent = '媒体无法加载，点击重试';
+          },
+          { once: true },
+        );
+        media.src = url;
+        box.replaceChildren(media);
+        if (reference.kind === 'image') {
+          media.tabIndex = 0;
+          media.title = '点击放大';
+          const enlarge = () => this.showImage(url, reference.label);
+          media.addEventListener('click', enlarge);
+          media.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') enlarge();
+          });
+        }
+      } catch (error) {
+        trigger.disabled = false;
+        trigger.textContent = error.message;
+      }
+    };
+    const trigger = button(
+      this.doc,
+      reference.remote
+        ? `加载${reference.kind === 'video' ? '视频' : '图片'} · ${new URL(reference.source).hostname}`
+        : '加载媒体…',
+      'cfz-media-load',
+      load,
+    );
+    box.appendChild(trigger);
+    if (!reference.remote) load();
+    return box;
+  }
+  showImage(url, label) {
+    const dialog = element(this.doc, 'dialog', 'cfz-image-dialog');
+    const image = element(this.doc, 'img');
+    image.src = url;
+    image.alt = label;
+    image.referrerPolicy = 'no-referrer';
+    const close = button(this.doc, '×', 'cfz-image-close', () => dialog.close());
+    close.setAttribute('aria-label', '关闭图片');
+    dialog.append(image, close);
+    this.doc.documentElement.appendChild(dialog);
+    dialog.addEventListener('close', () => dialog.remove(), { once: true });
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) dialog.close();
+    });
+    dialog.showModal();
+  }
   async annotate() {
     return this.send({
       task: 'annotate',
@@ -897,7 +1143,15 @@ class ChatPanel {
   }
   async send(options = {}) {
     const text = options.text ?? this.input.value;
-    if (this.sending || this.running || !this.paper || !text.trim()) return;
+    const images = options.task ? [] : this.pendingImages.map((image) => image.id);
+    if (
+      this.sending ||
+      this.running ||
+      this.uploading ||
+      !this.paper ||
+      (!text.trim() && !images.length)
+    )
+      return;
     this.sending = true;
     this.setRunning(false);
     this.statusText(this.threadId ? '发送给 Codex…' : '正在附上 PDF 并创建 Codex 对话…');
@@ -908,6 +1162,7 @@ class ChatPanel {
         paper,
         threadId: this.threadId,
         text,
+        images,
         model: this.models.value || undefined,
         ...(options.task ? { task: options.task } : {}),
       });
@@ -915,6 +1170,7 @@ class ChatPanel {
       if (!options.preserveDraft) {
         this.input.value = '';
         this.input.style.height = '';
+        this.clearImages();
       }
       this.threadId = r.threadId;
       if (!Array.from(this.sessions.options).some((o) => o.value === r.threadId))

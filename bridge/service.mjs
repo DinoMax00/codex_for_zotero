@@ -132,8 +132,10 @@ export class PaperService {
       return r;
     }
   }
-  async send({ paper, threadId, text, model, effort, task }) {
-    if (typeof text !== 'string' || !text.trim()) throw new Error('请先输入问题');
+  async send({ paper, threadId, text = '', model, effort, task, images = [] }) {
+    if (typeof text !== 'string' || (!text.trim() && !images?.length))
+      throw new Error('请先输入问题或添加图片');
+    const imageInput = await this.store.media.inputs(images);
     if (task && task !== 'annotate') throw new Error('不支持的论文任务');
     if (text.length > 150000) throw new Error('问题过长，请拆成多次发送');
     return this.lock(this.store.key(paper), async () => {
@@ -182,6 +184,7 @@ export class PaperService {
       const input = session.attached
         ? [{ type: 'text', text }]
         : firstInput(paper, session.attachment, text);
+      input.push(...imageInput);
       if (skillInput) input.push(skillInput);
       // Preserve native permissions, tools and model defaults; only explicit UI choices override them.
       const params = { threadId, input, summary: 'auto' };

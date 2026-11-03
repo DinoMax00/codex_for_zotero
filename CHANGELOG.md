@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — 2026-11-03
+
+- Add image attachments through file selection, clipboard paste, and drag-and-drop, with removable previews and image-only messages.
+- Send persistent image snapshots as native Codex `localImage` inputs and restore their previews in history.
+- Render image/video Markdown and completed native image-generation outputs; expand images and play supported videos inline with seeking.
+- Add private per-file streaming URLs, signature/path validation, upload size limits, and explicit loading for remote media.
+
 ## 0.6.0 — 2026-11-03
 
 First public release.
