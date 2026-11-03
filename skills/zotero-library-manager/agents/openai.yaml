@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zotero 论文入库与分类"
+  short_description: "查重添加论文并放入指定分类，创建和复用分类及子分类，保留已有归类"
+  default_prompt: "请使用 $zotero-library-manager 把指定论文添加到 Zotero 的目标分类；先查重，按要求创建缺少的分类，并核对保存结果。"

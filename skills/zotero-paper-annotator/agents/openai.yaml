@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zotero 论文精读批注"
+  short_description: "通读 Zotero 论文，定位核心观点和实验结论，高亮原文并写中文批注"
+  default_prompt: "请使用 $zotero-paper-annotator 精读当前 Zotero 论文，在标题处写全文总结，并高亮核心观点、方法与实验结论，添加中文批注。"

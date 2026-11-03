@@ -1,0 +1,38 @@
+{
+  "name": "codex-for-zotero",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test test/*.test.mjs",
+    "bridge": "node bridge/server.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "release:check": "node scripts/check-release.mjs",
+    "probe": "node scripts/probe-native.mjs"
+  },
+  "dependencies": {
+    "dompurify": "^3.2.7",
+    "katex": "^0.19.1",
+    "marked": "^16.4.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.10",
+    "prettier": "3.6.2"
+  },
+  "description": "A Zotero sidebar for paper conversations with your local Codex.",
+  "license": "MIT",
+  "author": "DinoMax00",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DinoMax00/codex_for_zotero.git"
+  },
+  "homepage": "https://github.com/DinoMax00/codex_for_zotero#readme",
+  "bugs": {
+    "url": "https://github.com/DinoMax00/codex_for_zotero/issues"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

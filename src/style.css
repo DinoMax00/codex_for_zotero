@@ -1,0 +1,523 @@
+.cfz {
+  --cfz-bg: light-dark(#fff, #202020);
+  --cfz-soft: light-dark(#f4f4f4, #2b2b2b);
+  --cfz-border: light-dark(#dedede, #444);
+  --cfz-text: light-dark(#242424, #ececec);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: calc(100vh - 140px);
+  min-height: 300px;
+  min-width: 0;
+  padding: 0 10px 8px;
+  color: var(--cfz-text);
+  background: var(--cfz-bg);
+  font:
+    13px/1.65 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  box-sizing: border-box;
+}
+.cfz * {
+  box-sizing: border-box;
+}
+.cfz button,
+.cfz select,
+.cfz input,
+.cfz textarea {
+  font: inherit;
+  color: inherit;
+}
+.cfz button {
+  cursor: pointer;
+  border: 1px solid var(--cfz-border);
+  border-radius: 8px;
+  padding: 6px 9px;
+  background: var(--cfz-bg);
+}
+.cfz button:hover {
+  background: var(--cfz-soft);
+}
+.cfz button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.cfz-log {
+  flex: 1;
+  min-height: 80px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: 10px 4px 18px;
+  scrollbar-width: thin;
+  user-select: text;
+}
+.cfz-composer {
+  flex: none;
+  padding: 10px 11px 8px;
+  border: 1px solid var(--cfz-border);
+  border-radius: 17px;
+  background: var(--cfz-bg);
+  box-shadow: 0 1px 5px #00000008;
+}
+.cfz-input {
+  display: block;
+  width: 100%;
+  height: 48px;
+  min-height: 46px;
+  max-height: 160px;
+  padding: 0 2px 7px;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  line-height: 1.6;
+  user-select: text;
+}
+.cfz-input::placeholder {
+  color: #999;
+  opacity: 1;
+}
+.cfz-composer:focus-within {
+  border-color: light-dark(#bcbcbc, #777);
+}
+.cfz-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+  min-height: 32px;
+}
+.cfz-models {
+  margin-right: auto;
+  min-width: 60px;
+  max-width: calc(100% - 44px);
+  padding: 3px 19px 3px 5px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 11px !important;
+  text-overflow: ellipsis;
+  outline-offset: 2px;
+}
+.cfz .cfz-send,
+.cfz .cfz-stop {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: light-dark(#2f2f2f, #e7e7e7);
+  color: light-dark(#fff, #222);
+  font-size: 20px;
+  line-height: 1;
+}
+.cfz .cfz-send:hover,
+.cfz .cfz-stop:hover {
+  background: light-dark(#111, #fff);
+}
+.cfz .cfz-stop {
+  font-size: 12px;
+}
+.cfz-status {
+  flex: none;
+  padding: 7px 3px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #888;
+  overflow-wrap: anywhere;
+}
+.cfz-error {
+  color: light-dark(#b33b3b, #e59b9b);
+}
+.cfz-menu {
+  position: absolute;
+  right: 10px;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(240px, calc(100% - 20px));
+  padding: 6px;
+  border: 1px solid var(--cfz-border);
+  border-radius: 10px;
+  background: var(--cfz-bg);
+  box-shadow: 0 6px 22px #00000014;
+}
+.cfz .cfz-menu-item {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+.cfz .cfz-menu-item:hover {
+  background: var(--cfz-soft);
+}
+.cfz-sessions {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--cfz-soft);
+  font-size: 12px !important;
+}
+.cfz-message {
+  margin: 0 0 17px;
+  padding: 0 2px;
+  overflow-wrap: anywhere;
+}
+.cfz-role {
+  display: none;
+}
+.cfz-userMessage {
+  max-width: 94%;
+  width: fit-content;
+  margin-left: auto;
+  padding: 9px 13px;
+  border-radius: 14px;
+  background: var(--cfz-soft);
+}
+.cfz-userMessage .cfz-content {
+  white-space: pre-wrap;
+}
+.cfz-content p {
+  margin: 7px 0;
+}
+.cfz-content p:first-child {
+  margin-top: 0;
+}
+.cfz-content p:last-child {
+  margin-bottom: 0;
+}
+.cfz-content h1,
+.cfz-content h2,
+.cfz-content h3 {
+  line-height: 1.45;
+  margin: 17px 0 8px;
+  font-size: 1.08em;
+  font-weight: 650;
+}
+.cfz-content h1 {
+  font-size: 1.18em;
+}
+.cfz-content ul,
+.cfz-content ol {
+  padding-left: 20px;
+  margin: 8px 0;
+}
+.cfz-content li {
+  margin: 4px 0;
+}
+.cfz-content a {
+  color: light-dark(#245d94, #8ebfec);
+}
+.cfz-content code {
+  font:
+    12px/1.6 ui-monospace,
+    monospace;
+  background: var(--cfz-soft);
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.cfz-content pre {
+  overflow: auto;
+  border: 1px solid var(--cfz-border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--cfz-soft);
+  white-space: pre;
+}
+.cfz-content pre code {
+  padding: 0;
+}
+.cfz-content table {
+  display: block;
+  overflow: auto;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.cfz-content th,
+.cfz-content td {
+  border: 1px solid var(--cfz-border);
+  padding: 6px;
+  min-width: 55px;
+}
+.cfz-content blockquote {
+  border-left: 2px solid var(--cfz-border);
+  margin: 8px 0;
+  padding-left: 11px;
+  color: #888;
+}
+.cfz-tool {
+  margin-bottom: 9px;
+  padding: 3px 2px;
+  font-size: 10px;
+  color: #888;
+}
+.cfz-tool .cfz-content {
+  max-height: 34px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.cfz-approval {
+  border: 1px solid var(--cfz-border);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: var(--cfz-soft);
+  max-height: 330px;
+  overflow: auto;
+}
+.cfz-approval pre {
+  white-space: pre-wrap;
+  font-size: 11px;
+  max-height: 120px;
+  overflow: auto;
+}
+.cfz-approval .cfz-send {
+  width: auto;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.cfz-approval fieldset {
+  border: 0;
+  margin: 8px 0;
+  padding: 0;
+}
+.cfz-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  margin: 8px 0;
+}
+.cfz-free {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid var(--cfz-border);
+  border-radius: 5px;
+  background: var(--cfz-bg);
+}
+.cfz-history {
+  width: 100%;
+  font-size: 11px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #888 !important;
+}
+.cfz [hidden] {
+  display: none !important;
+}
+
+.cfz {
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 260px;
+}
+.cfz-section {
+  overscroll-behavior: contain;
+}
+.cfz-log {
+  min-height: 0;
+  overflow-anchor: none;
+  overscroll-behavior: none;
+}
+.cfz-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  flex: none;
+  padding: 7px 3px 8px;
+  border-bottom: 1px solid var(--cfz-border);
+  margin-bottom: 2px;
+}
+.cfz .cfz-title {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 1px 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: text;
+}
+.cfz .cfz-title:hover {
+  background: var(--cfz-soft);
+}
+.cfz-title-input {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  padding: 2px 4px;
+  border: 1px solid var(--cfz-border);
+  border-radius: 5px;
+  background: var(--cfz-bg);
+  font-size: 12px !important;
+}
+.cfz-run-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+  font-size: 11px;
+  line-height: 20px;
+  color: light-dark(#647268, #b2c6b7);
+  white-space: nowrap;
+}
+.cfz-run-label:before {
+  content: '✓';
+  font-size: 12px;
+}
+.cfz-run-label[data-state='inProgress'] {
+  color: var(--cfz-text);
+}
+.cfz-run-label[data-state='inProgress']:before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid var(--cfz-border);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: cfz-spin 0.8s linear infinite;
+}
+.cfz-run-label[data-state='interrupted']:before {
+  content: '■';
+  font-size: 8px;
+}
+.cfz-run-label[data-state='failed'] {
+  color: #bd4646;
+}
+.cfz-run-label[data-state='failed']:before {
+  content: '!';
+}
+@keyframes cfz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cfz-run-label[data-state='inProgress']:before {
+    animation: none;
+  }
+}
+.cfz-transient {
+  border-left: 2px solid var(--cfz-border);
+  padding: 3px 9px;
+  font-size: 12px;
+  color: light-dark(#777, #aaa);
+}
+.cfz-transient .cfz-role {
+  display: block;
+  font-size: 10px;
+  margin-bottom: 4px;
+  color: #888;
+}
+.cfz-transient .cfz-content {
+  max-height: 150px;
+  overflow: auto;
+}
+.cfz-math math {
+  font-size: 1.08em;
+  color: inherit;
+}
+.cfz-math-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 9px 0;
+  overscroll-behavior: contain;
+}
+.cfz-math-display math {
+  margin: 0 auto;
+  min-width: min-content;
+}
+.cfz-math .katex-error {
+  color: #b33;
+  white-space: pre-wrap;
+}
+
+.cfz-composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: auto;
+  min-width: 0;
+  max-width: calc(100% - 38px);
+}
+.cfz-composer-tools .cfz-models {
+  margin-right: 0;
+  min-width: 0;
+  max-width: calc(100% - 62px);
+  flex: 0 1 auto;
+}
+.cfz .cfz-annotate {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  min-height: 28px;
+  font-size: 11px;
+  line-height: 1.4;
+  background: transparent;
+  white-space: nowrap;
+}
+.cfz .cfz-annotate img {
+  width: 14px;
+  height: 14px;
+  opacity: 0.8;
+}
+.cfz .cfz-annotate:hover {
+  background: var(--cfz-soft);
+}
+@media (prefers-color-scheme: dark) {
+  .cfz-annotate img {
+    filter: invert(1);
+  }
+}
+
+.cfz .cfz-citation {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: baseline;
+  gap: 3px;
+  margin: 0 2px;
+  padding: 1px 6px;
+  border: 1px solid var(--cfz-border);
+  border-radius: 5px;
+  background: var(--cfz-soft);
+  color: light-dark(#52675d, #bbd1c4);
+  font-size: 11px;
+  line-height: 1.7;
+  white-space: nowrap;
+}
+.cfz .cfz-citation:hover {
+  border-color: light-dark(#a7b7ad, #8a9e92);
+  text-decoration: underline;
+}
+.cfz .cfz-citation:disabled {
+  opacity: 0.65;
+}
