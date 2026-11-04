@@ -47,7 +47,7 @@ export async function createBridge(config) {
       if (req.method === 'GET' && url.pathname === '/health')
         return json(res, 200, {
           ok: true,
-          version: config.version || '0.7.1',
+          version: config.version || '0.7.2',
           pid: process.pid,
           projectRoot: store.projectRoot,
         });
@@ -129,7 +129,7 @@ export async function createBridge(config) {
     url: `http://127.0.0.1:${server.address().port}`,
     token,
     pid: process.pid,
-    version: config.version || '0.7.1',
+    version: config.version || '0.7.2',
   };
   let closed = false;
   async function close() {

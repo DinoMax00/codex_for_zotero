@@ -174,6 +174,25 @@ function element(doc, tag, cls, text) {
   if (text !== undefined) node.textContent = text;
   return node;
 }
+function toolbarIcon(doc, name) {
+  const shapes = {
+    plus: ['M10 4v12', 'M4 10h12'],
+    chevron: ['m6 8 4 4 4-4'],
+    annotate: ['m6 13 7-8 3 3-8 7-3 1 1-3Z', 'M3 17h8', 'm11 7 3 3'],
+    send: ['M10 16V4', 'm5 9 5-5 5 5'],
+    stop: ['M6 6h8v8H6Z'],
+  };
+  const svg = doc.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 20 20');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  for (const data of shapes[name]) {
+    const path = doc.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', data);
+    svg.appendChild(path);
+  }
+  return svg;
+}
 function button(doc, label, cls, handler) {
   const b = element(doc, 'button', cls, label);
   b.type = 'button';
@@ -356,7 +375,8 @@ class ChatPanel {
       this.addImages(Array.from(this.fileInput.files || []));
       this.fileInput.value = '';
     });
-    this.imageButton = button(d, '+', 'cfz-image-button', () => this.fileInput.click());
+    this.imageButton = button(d, '', 'cfz-image-button', () => this.fileInput.click());
+    this.imageButton.appendChild(toolbarIcon(d, 'plus'));
     this.imageButton.title = '添加图片，也可粘贴或拖入';
     this.imageButton.setAttribute('aria-label', '添加图片');
     this.input.addEventListener('paste', (e) => {
@@ -393,20 +413,20 @@ class ChatPanel {
     this.annotateButton.title = '精读当前论文，高亮核心观点并添加中文批注';
     this.annotateButton.setAttribute('aria-label', '自动阅读并批注论文');
     this.annotateButton.disabled = true;
-    const annotateIcon = element(d, 'img');
-    annotateIcon.src = 'chrome://codex-for-zotero/content/annotate.svg';
-    annotateIcon.alt = '';
-    annotateIcon.setAttribute('aria-hidden', 'true');
-    this.annotateButton.append(annotateIcon, element(d, 'span', null, '批注'));
-    this.sendButton = button(d, '↑', 'cfz-send', () => this.send());
+    this.annotateButton.append(toolbarIcon(d, 'annotate'), element(d, 'span', null, '批注'));
+    this.sendButton = button(d, '', 'cfz-send', () => this.send());
+    this.sendButton.appendChild(toolbarIcon(d, 'send'));
     this.sendButton.title = '发送 · Enter（Shift + Enter 换行）';
     this.sendButton.setAttribute('aria-label', '发送');
-    this.stopButton = button(d, '■', 'cfz-stop', () => this.stop());
+    this.stopButton = button(d, '', 'cfz-stop', () => this.stop());
+    this.stopButton.appendChild(toolbarIcon(d, 'stop'));
     this.stopButton.title = '停止';
     this.stopButton.setAttribute('aria-label', '停止回复');
     this.stopButton.hidden = true;
     const tools = element(d, 'div', 'cfz-composer-tools');
-    tools.append(this.imageButton, this.models, this.annotateButton);
+    const modelPicker = element(d, 'div', 'cfz-model-picker');
+    modelPicker.append(this.models, toolbarIcon(d, 'chevron'));
+    tools.append(this.imageButton, modelPicker, this.annotateButton);
     actions.append(tools, this.stopButton, this.sendButton);
     composer.append(this.attachments, this.input, actions, this.fileInput);
     this.status = element(d, 'div', 'cfz-status');

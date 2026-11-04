@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.2 — 2026-11-04
+
+- Align composer controls to a shared 30px height and replace text glyphs with centered vector icons.
+- Refine model selection, annotation spacing, hover states, and keyboard focus styling.
+
 ## 0.7.1 — 2026-11-03
 
 - Add image attachments through file selection, clipboard paste, and drag-and-drop, with removable previews and image-only messages.
