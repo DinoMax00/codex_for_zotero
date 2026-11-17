@@ -1,3 +1,5 @@
+import { TranslationColumns } from './translation-columns.mjs';
+
 const NS = 'http://www.w3.org/1999/xhtml';
 const VIEWER_URL = 'resource://zotero/reader/pdf/web/viewer.html';
 const wait = (win, ms) => new Promise((resolve) => win.setTimeout(resolve, ms));
@@ -114,7 +116,18 @@ function syncScrolling(win, original, translated, map, enabled, pageChanged) {
 }
 
 export class TranslationView {
-  constructor({ reader, paper, bridge, doc, io, cu, onClose, exportFile, chat }) {
+  constructor({
+    reader,
+    paper,
+    bridge,
+    doc,
+    io,
+    cu,
+    onClose,
+    exportFile,
+    chat,
+    columnPreferences,
+  }) {
     Object.assign(this, { reader, paper, bridge, doc, io, cu, onClose, exportFile, chat });
     this.win = doc.defaultView;
     this.closed = false;
@@ -158,6 +171,13 @@ export class TranslationView {
       chat.classList.add('cfz-translation-chat');
       chat.scrollTop = 0;
     }
+    this.columns = new TranslationColumns({
+      doc,
+      reader,
+      panel,
+      ...columnPreferences,
+      resized: () => this.fitPages?.(),
+    });
     this.alignHeader();
     this.resize = new this.win.ResizeObserver(() => this.alignHeader());
     this.resize.observe(reader._iframe);
@@ -186,6 +206,7 @@ export class TranslationView {
       if (Math.abs(viewer.currentScale - scale) > 0.0001) viewer.currentScale = scale;
     };
     const fit = () => {
+      if (this.columns.drag) return;
       const next = `${left.container.clientWidth}:${right.container.clientWidth}`;
       if (width === next || !left.container.clientWidth || !right.container.clientWidth) return;
       width = next;
@@ -225,11 +246,13 @@ export class TranslationView {
       rightChanged = follow(left);
     source.eventBus.on('scalechanging', leftChanged);
     translation.eventBus.on('scalechanging', rightChanged);
+    this.fitPages = fit;
     fit();
     const resize = new this.win.ResizeObserver(fit);
     resize.observe(this.panel);
     resize.observe(this.reader._iframe);
     return () => {
+      this.fitPages = null;
       resize.disconnect();
       source.eventBus.off('scalechanging', leftChanged);
       translation.eventBus.off('scalechanging', rightChanged);
@@ -400,6 +423,7 @@ export class TranslationView {
     this.stopSync?.();
     this.stopScale?.();
     this.resize?.disconnect();
+    this.columns.close();
     if (this.chat) {
       this.chat.classList.remove('cfz-translation-chat');
       this.chat

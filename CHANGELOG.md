@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.3
+
+- Add draggable dividers between the original PDF, translation, and chat. Remember the chosen widths and keep PDF page heights aligned.
+
 ## 0.8.2
 
 - Typeset translated text in KaiTi when available, with larger type and collision checks for original figures and adjacent columns.

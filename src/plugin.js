@@ -1206,6 +1206,28 @@ class ChatPanel {
       io: IOUtils,
       cu: Cu,
       chat: this.root.closest('.zotero-view-item'),
+      columnPreferences: {
+        load: () => {
+          try {
+            const values = JSON.parse(preference('translationColumnRatios', 'null'));
+            if (
+              Array.isArray(values) &&
+              values.length === 3 &&
+              values.every((value) => Number.isFinite(value) && value > 0)
+            ) {
+              const sum = values.reduce((total, value) => total + value, 0);
+              return values.map((value) => value / sum);
+            }
+          } catch {}
+          return null;
+        },
+        save: (values) =>
+          Zotero.Prefs.set(
+            'extensions.codex-for-zotero.translationColumnRatios',
+            JSON.stringify(values),
+            true,
+          ),
+      },
       onClose: () => TRANSLATIONS.delete(tab),
       exportFile: async (source) => {
         const { FilePicker } = ChromeUtils.importESModule(
@@ -1573,6 +1595,7 @@ export async function startup() {
   tabObserver = Zotero.Notifier.registerObserver(
     {
       notify(event, type, ids) {
+        if (event === 'select') for (const view of TRANSLATIONS.values()) view.columns.refresh();
         if (event === 'close' || event === 'unload')
           for (const id of ids) TRANSLATIONS.get(id)?.close();
       },
