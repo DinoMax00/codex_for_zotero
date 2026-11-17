@@ -1,3 +1,4 @@
+import { TranslationService } from './translate.mjs';
 import http from 'node:http';
 import path from 'node:path';
 import os from 'node:os';
@@ -14,6 +15,7 @@ export async function createBridge(config) {
   await store.load();
   const rpc = new CodexRPC(config.codexPath, { cwd: store.projectRoot });
   const service = new PaperService(rpc, store);
+  const translations = new TranslationService({ ...config, store });
   function json(res, status, value) {
     res.writeHead(status, {
       'Content-Type': 'application/json; charset=utf-8',
@@ -47,7 +49,7 @@ export async function createBridge(config) {
       if (req.method === 'GET' && url.pathname === '/health')
         return json(res, 200, {
           ok: true,
-          version: config.version || '0.7.2',
+          version: config.version || '0.8.0',
           pid: process.pid,
           projectRoot: store.projectRoot,
         });
@@ -83,6 +85,18 @@ export async function createBridge(config) {
         case '/media/prepare':
           service.own(p.threadId);
           data = await store.media.register(p.path);
+          break;
+        case '/translation/lookup':
+          data = await translations.lookup(p.paper);
+          break;
+        case '/translation/start':
+          data = await translations.start(p.paper);
+          break;
+        case '/translation/status':
+          data = translations.status(p.id);
+          break;
+        case '/translation/cancel':
+          data = translations.cancel(p.id);
           break;
         case '/paper':
           data = await service.list(p.paper);
@@ -129,12 +143,13 @@ export async function createBridge(config) {
     url: `http://127.0.0.1:${server.address().port}`,
     token,
     pid: process.pid,
-    version: config.version || '0.7.2',
+    version: config.version || '0.8.0',
   };
   let closed = false;
   async function close() {
     if (closed) return;
     closed = true;
+    translations.close();
     rpc.close();
     server.closeAllConnections();
     server.close();

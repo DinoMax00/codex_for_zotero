@@ -73,7 +73,7 @@ export class CodexRPC extends EventEmitter {
       }
     });
     const info = await this.call('initialize', {
-      clientInfo: { name: 'codex_for_zotero', title: 'Codex for Zotero', version: '0.7.2' },
+      clientInfo: { name: 'codex_for_zotero', title: 'Codex for Zotero', version: '0.8.0' },
       capabilities: { experimentalApi: true },
     });
     this.notify('initialized', {});

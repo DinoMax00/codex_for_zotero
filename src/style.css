@@ -671,3 +671,85 @@
   font-size: 22px;
   cursor: pointer;
 }
+
+/* Mounted beside the native PDF reader, inside the same Zotero tab. */
+.cfz-translation-tab {
+  flex-direction: row;
+}
+.cfz-translation-tab > .reader {
+  min-width: 0;
+  flex: 1 1 0;
+}
+.cfz-translation {
+  display: flex;
+  position: relative;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-inline-start: 1px solid light-dark(#ddd, #444);
+  color: light-dark(#262626, #eee);
+  background: light-dark(#f5f5f5, #252525);
+  font:
+    12px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+}
+.cfz-translation-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 39px;
+  padding: 4px 8px 4px 10px;
+  border-bottom: 1px solid light-dark(#e0e0e0, #414141);
+  background: light-dark(#fff, #282828);
+  white-space: nowrap;
+}
+.cfz-translation-page {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: light-dark(#666, #bbb);
+}
+.cfz-translation button {
+  appearance: none;
+  margin: 0;
+  border: 1px solid light-dark(#dedede, #4c4c4c);
+  border-radius: 7px;
+  padding: 4px 8px;
+  color: inherit;
+  background: light-dark(#fff, #303030);
+  font: inherit;
+  cursor: pointer;
+}
+.cfz-translation button:hover {
+  background: light-dark(#eee, #383838);
+}
+.cfz-translation button[aria-pressed='true'] {
+  background: light-dark(#e9f0ee, #374744);
+}
+.cfz-translation-empty {
+  position: absolute;
+  inset: 39px 0 0;
+  display: flex;
+  z-index: 2;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  background: light-dark(#f5f5f5, #252525);
+}
+.cfz-translation [hidden] {
+  display: none !important;
+}
+.cfz-translation-browser {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  border: 0;
+}

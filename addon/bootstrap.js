@@ -19,6 +19,7 @@ async function startup({ id, version, rootURI, resourceURI }) {
     IOUtils,
     PathUtils,
     URL,
+    Cu: Components.utils,
     Cc: Components.classes,
     Ci: Components.interfaces,
     rootURI,

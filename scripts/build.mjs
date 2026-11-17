@@ -17,9 +17,17 @@ await mkdir(addon, { recursive: true });
 for (const name of ['bootstrap.js', 'manifest.json', 'content', 'locale']) {
   await cp(path.join(root, 'addon', name), path.join(addon, name), { recursive: true });
 }
-for (const name of ['server.mjs', 'rpc.mjs', 'store.mjs', 'service.mjs', 'media.mjs']) {
+for (const name of [
+  'server.mjs',
+  'rpc.mjs',
+  'store.mjs',
+  'service.mjs',
+  'media.mjs',
+  'translate.mjs',
+  'translation',
+]) {
   await mkdir(path.join(addon, 'bridge'), { recursive: true });
-  await cp(path.join(root, 'bridge', name), path.join(addon, 'bridge', name));
+  await cp(path.join(root, 'bridge', name), path.join(addon, 'bridge', name), { recursive: true });
 }
 await cp(path.join(root, 'LICENSE'), path.join(addon, 'LICENSE'));
 await mkdir(path.join(addon, 'third-party'), { recursive: true });

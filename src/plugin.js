@@ -1,3 +1,4 @@
+import { TranslationView } from './translation-view.mjs';
 import { userImages, mediaReference } from './media-protocol.mjs';
 import { markdownWithMath, visibleTurnItems } from './presentation.mjs';
 import { AnnotationBridge } from './annotation-bridge.js';
@@ -6,6 +7,8 @@ import css from './style.css';
 
 const NS = 'http://www.w3.org/1999/xhtml';
 const PANELS = new Map();
+const TRANSLATIONS = new Map();
+let tabObserver;
 const documents = new Set();
 const PANE_ID = 'codex-for-zotero-chat';
 let registeredPaneID;
@@ -53,9 +56,22 @@ class Bridge {
     } catch {}
     const serviceDir = PathUtils.join(this.dir, `service-${pluginVersion}`);
     await IOUtils.makeDirectory(serviceDir, { ignoreExisting: true });
-    for (const name of ['server.mjs', 'rpc.mjs', 'store.mjs', 'service.mjs', 'media.mjs']) {
+    await IOUtils.makeDirectory(PathUtils.join(serviceDir, 'translation'), {
+      ignoreExisting: true,
+    });
+    for (const name of [
+      'server.mjs',
+      'rpc.mjs',
+      'store.mjs',
+      'service.mjs',
+      'media.mjs',
+      'translate.mjs',
+      'translation/pdf.py',
+    ]) {
       const source = await resourceText('bridge/' + name);
-      await IOUtils.writeUTF8(PathUtils.join(serviceDir, name), source, { permissions: 0o600 });
+      await IOUtils.writeUTF8(PathUtils.join(serviceDir, ...name.split('/')), source, {
+        permissions: 0o600,
+      });
     }
     const paths = ['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node'];
     let nodePath = preference('nodePath', '');
@@ -92,6 +108,14 @@ class Bridge {
       JSON.stringify({
         version: pluginVersion,
         codexPath,
+        uvPath: preference(
+          'uvPath',
+          (await IOUtils.exists('/opt/homebrew/bin/uv'))
+            ? '/opt/homebrew/bin/uv'
+            : (await IOUtils.exists('/usr/local/bin/uv'))
+              ? '/usr/local/bin/uv'
+              : PathUtils.join(home, '.local', 'bin', 'uv'),
+        ),
         projectRoot,
         dataDir: this.dir,
         connectionFile,
@@ -324,6 +348,10 @@ class ChatPanel {
       if (this.threadId) Zotero.launchURL(`codex://threads/${encodeURIComponent(this.threadId)}`);
     });
     this.menu.append(
+      button(d, '原文翻译', 'cfz-menu-item', () => {
+        this.menu.hidden = true;
+        this.openTranslation().catch((error) => this.statusText(error.message, true));
+      }),
       button(d, '新对话', 'cfz-menu-item', () => this.newConversation()),
       this.sessions,
       this.openButton,
@@ -1154,6 +1182,50 @@ class ChatPanel {
     });
     dialog.showModal();
   }
+  async openTranslation() {
+    if (!this.paper) throw new Error('请先打开论文 PDF');
+    const tab = this.win.Zotero_Tabs?.selectedID;
+    const reader = tab && Zotero.Reader.getByTabID(tab);
+    if (!reader?._iframe?.parentNode || reader._type !== 'pdf')
+      throw new Error('请在 PDF 阅读器中使用原文翻译');
+    const attachment = Zotero.Items.get(reader.itemID);
+    if (
+      attachment?.key !== this.paper.attachmentKey ||
+      attachment?.libraryID !== this.paper.libraryID
+    )
+      throw new Error('论文正在切换，请稍后重试');
+    if (TRANSLATIONS.has(tab)) {
+      TRANSLATIONS.get(tab).close();
+      return;
+    }
+    const view = new TranslationView({
+      reader,
+      paper: this.paper,
+      bridge,
+      doc: this.doc,
+      io: IOUtils,
+      cu: Cu,
+      onClose: () => TRANSLATIONS.delete(tab),
+      exportFile: async (source) => {
+        const { FilePicker } = ChromeUtils.importESModule(
+          'chrome://zotero/content/modules/filePicker.mjs',
+        );
+        const picker = new FilePicker();
+        picker.init(this.win, '另存中文 PDF', picker.modeSave);
+        picker.defaultString =
+          (view.paper.title || '论文').replace(/[\/:]/g, ' ') + ' - 中文译文.pdf';
+        picker.defaultExtension = 'pdf';
+        picker.appendFilter('PDF', '*.pdf');
+        const result = await picker.show();
+        if (result === picker.returnOK || result === picker.returnReplace) {
+          if (picker.file === view.paper.path) throw new Error('请选择不同的文件名，避免覆盖原文');
+          await IOUtils.copy(source, picker.file, { noOverwrite: result !== picker.returnReplace });
+        }
+      },
+    });
+    TRANSLATIONS.set(tab, view);
+    await view.open();
+  }
   async annotate() {
     return this.send({
       task: 'annotate',
@@ -1460,6 +1532,15 @@ export async function startup() {
     },
     sectionButtons: [
       {
+        type: 'codex-translate',
+        icon: 'chrome://codex-for-zotero/content/translate.svg',
+        l10nID: 'codex-for-zotero-translate',
+        onClick: ({ body }) => {
+          const panel = PANELS.get(body);
+          panel?.openTranslation().catch((error) => panel.statusText(error.message, true));
+        },
+      },
+      {
         type: 'codex-options',
         icon: 'chrome://codex-for-zotero/content/menu.svg',
         l10nID: 'codex-for-zotero-menu',
@@ -1488,11 +1569,22 @@ export async function startup() {
   });
   if (!id) throw new Error('Codex 侧栏注册失败');
   registeredPaneID = id;
+  tabObserver = Zotero.Notifier.registerObserver(
+    {
+      notify(event, type, ids) {
+        if (event === 'close' || event === 'unload')
+          for (const id of ids) TRANSLATIONS.get(id)?.close();
+      },
+    },
+    ['tab'],
+    'codex-for-zotero-translation',
+  );
 }
 export function windowLoad(window) {
   installDocument(window.document);
 }
 export function windowUnload(window) {
+  for (const view of TRANSLATIONS.values()) if (view.win === window) view.close();
   for (const [body, p] of PANELS)
     if (p.win === window) {
       p.dispose();
@@ -1500,6 +1592,8 @@ export function windowUnload(window) {
     }
 }
 export async function shutdown() {
+  if (tabObserver) Zotero.Notifier.unregisterObserver(tabObserver);
+  for (const view of TRANSLATIONS.values()) view.close();
   if (registeredPaneID) Zotero.ItemPaneManager.unregisterSection(registeredPaneID);
   for (const p of PANELS.values()) p.dispose();
   PANELS.clear();

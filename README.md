@@ -25,6 +25,16 @@ Codex for Zotero adds a minimal chat panel to Zotero's right sidebar. It forward
 
 The current sidebar labels and the two skill instructions are in Chinese. The README and development documentation are in English.
 
+## Translate a paper
+
+1. Open a text-based PDF in Zotero and select the Codex sidebar. Click the translation icon in its header, or choose **⋯ → 原文翻译**.
+2. In the middle column, click **生成中文 PDF**. Translation always uses **GPT-6-Luna** through the signed-in local Codex App Server. The chat model remains independent. Install `uv` for this feature; it runs the PDF helper and resolves its Python dependency on first use.
+3. Read the original, Chinese PDF, and chat side by side. Scroll either PDF to follow the corresponding region in the other. Click **联动** to switch to independent scrolling and **另存 PDF** to export the Chinese document.
+
+The PDF replaces eligible text in its original page regions so figures, vector diagrams, displayed equations, and page positions stay aligned. References, formula-heavy lines, and text baked into images may remain in the original language. If a passage cannot fit at a usable size, click its **见补译** marker to reach the complete translation at the end. Scanned PDFs need an OCR text layer first; a PDF without extractable text is not sent for translation.
+
+Completed translations are reused for the same source content. Closing the translation column does not cancel a running job; reopening it restores progress. A cancelled or failed translation can continue from completed batches. Translation sends extracted paper text to the configured Codex provider and uses its normal quota. The original PDF and Zotero annotations are untouched. Translation files and resumable checkpoints live under the private Zotero profile's `codex-for-zotero/translations/` directory. They are not added to Zotero attachments or synced by the plugin.
+
 ## Requirements
 
 | Component               | Supported / verified                                                                                                                                                                 |

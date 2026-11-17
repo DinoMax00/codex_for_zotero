@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.8.0 — 2026-11-17
+
+- Translate text-based papers with GPT-6-Luna and export a selectable-text Chinese PDF while preserving page geometry, figures, and displayed formulas.
+- Read original PDF, translated PDF, and chat together in three columns, with bidirectional scroll synchronization and an independent-scroll toggle.
+- Cache translations by PDF content and resume completed batches after cancellation or errors.
+
 ## 0.7.2 — 2026-11-04
 
 - Align composer controls to a shared 30px height and replace text glyphs with centered vector icons.
