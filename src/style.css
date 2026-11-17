@@ -701,7 +701,8 @@
   flex: none;
   align-items: center;
   gap: 6px;
-  min-height: 39px;
+  box-sizing: border-box;
+  height: var(--cfz-translation-header-height, 41px);
   padding: 4px 8px 4px 10px;
   border-bottom: 1px solid light-dark(#e0e0e0, #414141);
   background: light-dark(#fff, #282828);
@@ -733,7 +734,7 @@
 }
 .cfz-translation-empty {
   position: absolute;
-  inset: 39px 0 0;
+  inset: var(--cfz-translation-header-height, 41px) 0 0;
   display: flex;
   z-index: 2;
   flex-direction: column;
@@ -752,4 +753,12 @@
   min-height: 0;
   min-width: 0;
   border: 0;
+}
+
+.zotero-view-item-main:has(> .cfz-translation-chat) > item-pane-header {
+  box-sizing: border-box;
+  min-height: var(--cfz-translation-header-height, 41px);
+}
+.cfz-translation-chat > :not(.cfz-section) {
+  display: none !important;
 }

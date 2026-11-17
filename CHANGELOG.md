@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.1
+
+- Typeset translated text in KaiTi when available, with larger type and collision checks for original figures and adjacent columns.
+- Align the three headers and synchronize PDF page height and zoom.
+- Save and reopen a matching `_cn.pdf` beside the original file, with local cache fallback for unwritable directories.
+- Retry incomplete translation batches in smaller groups and retain completed segments.
+
 ## 0.8.0 — 2026-11-17
 
 - Translate text-based papers with GPT-6-Luna and export a selectable-text Chinese PDF while preserving page geometry, figures, and displayed formulas.

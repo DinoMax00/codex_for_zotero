@@ -14,9 +14,9 @@ export function translateLocation(location, map, fromTranslation) {
   if (fromTranslation) {
     const entry = map.pages[location.page];
     if (!entry) return null;
-    return entry.supplement
-      ? { page: entry.source, x: entry.x, y: entry.y }
-      : { ...location, page: entry.source };
+    if (!entry.supplement) return { ...location, page: entry.source };
+    const segment = entry.segments?.findLast((part) => part.start <= location.y) || entry;
+    return { page: segment.source, x: segment.x, y: segment.y };
   }
   return location.page < map.sourcePages ? location : null;
 }
@@ -114,15 +114,15 @@ function syncScrolling(win, original, translated, map, enabled, pageChanged) {
 }
 
 export class TranslationView {
-  constructor({ reader, paper, bridge, doc, io, cu, onClose, exportFile }) {
-    Object.assign(this, { reader, paper, bridge, doc, io, cu, onClose, exportFile });
+  constructor({ reader, paper, bridge, doc, io, cu, onClose, exportFile, chat }) {
+    Object.assign(this, { reader, paper, bridge, doc, io, cu, onClose, exportFile, chat });
     this.win = doc.defaultView;
     this.closed = false;
     this.serial = 0;
     this.sync = true;
     const panel = (this.panel = el(doc, 'section', 'cfz-translation'));
     panel.setAttribute('aria-label', '中文译文');
-    const bar = el(doc, 'header', 'cfz-translation-bar');
+    const bar = (this.bar = el(doc, 'header', 'cfz-translation-bar'));
     this.label = el(doc, 'span', 'cfz-translation-page');
     bar.append(el(doc, 'strong', '', '中文译文'), this.label);
     this.syncButton = this.button('联动', () => {
@@ -153,6 +153,87 @@ export class TranslationView {
     panel.append(bar, this.placeholder);
     reader._iframe.parentNode.insertBefore(panel, reader._iframe.nextSibling);
     reader._iframe.parentNode.classList.add('cfz-translation-tab');
+    if (chat) {
+      this.chatScroll = chat.scrollTop;
+      chat.classList.add('cfz-translation-chat');
+      chat.scrollTop = 0;
+    }
+    this.alignHeader();
+    this.resize = new this.win.ResizeObserver(() => this.alignHeader());
+    this.resize.observe(reader._iframe);
+    this.resize.observe(panel);
+  }
+  alignHeader() {
+    const view = this.reader._internalReader?._primaryView;
+    const inner = view?._iframe?.getBoundingClientRect();
+    const viewport =
+      view?._iframeWindow?.PDFViewerApplication?.pdfViewer?.container.getBoundingClientRect();
+    if (!inner || !viewport) return;
+    const height = `${Math.max(32, inner.top + viewport.top)}px`;
+    if (this.panel.style.getPropertyValue('--cfz-translation-header-height') !== height) {
+      this.panel.style.setProperty('--cfz-translation-header-height', height);
+      this.chat
+        ?.closest('.zotero-view-item-main')
+        ?.style.setProperty('--cfz-translation-header-height', height);
+    }
+  }
+  matchPageScale(source, translation) {
+    const left = source.pdfViewer,
+      right = translation.pdfViewer;
+    let syncing = false,
+      width = '';
+    const setScale = (viewer, scale) => {
+      if (Math.abs(viewer.currentScale - scale) > 0.0001) viewer.currentScale = scale;
+    };
+    const fit = () => {
+      const next = `${left.container.clientWidth}:${right.container.clientWidth}`;
+      if (width === next || !left.container.clientWidth || !right.container.clientWidth) return;
+      width = next;
+      const position = pdfSurface(source).location();
+      syncing = true;
+      try {
+        left.currentScaleValue = right.currentScaleValue = 'page-width';
+        const scale = Math.min(left.currentScale, right.currentScale);
+        setScale(left, scale);
+        setScale(right, scale);
+        const first = (viewer) =>
+          viewer.getPageView(0).div.getBoundingClientRect().top -
+          viewer.container.getBoundingClientRect().top +
+          viewer.container.scrollTop;
+        right.viewer.style.marginTop = '0px';
+        right.viewer.style.marginTop = `${first(left) - first(right)}px`;
+        if (position) {
+          pdfSurface(source).move(position, false);
+          pdfSurface(translation).move(position, false);
+        }
+      } finally {
+        syncing = false;
+      }
+    };
+    const follow =
+      (other) =>
+      ({ scale }) => {
+        if (syncing) return;
+        syncing = true;
+        try {
+          setScale(other, scale);
+        } finally {
+          syncing = false;
+        }
+      };
+    const leftChanged = follow(right),
+      rightChanged = follow(left);
+    source.eventBus.on('scalechanging', leftChanged);
+    translation.eventBus.on('scalechanging', rightChanged);
+    fit();
+    const resize = new this.win.ResizeObserver(fit);
+    resize.observe(this.panel);
+    resize.observe(this.reader._iframe);
+    return () => {
+      resize.disconnect();
+      source.eventBus.off('scalechanging', leftChanged);
+      translation.eventBus.off('scalechanging', rightChanged);
+    };
   }
   button(label, action) {
     const button = el(this.doc, 'button', '', label);
@@ -222,6 +303,7 @@ export class TranslationView {
   fail(error) {
     if (this.closed) return;
     this.stopSync?.();
+    this.stopScale?.();
     this.frame?.remove();
     this.frame = null;
     this.placeholder.hidden = false;
@@ -275,6 +357,7 @@ export class TranslationView {
     await app.pdfViewer.pagesPromise;
     if (this.closed || serial !== this.serial) return;
     this.placeholder.hidden = true;
+    if (!result.storedWithPaper) this.saveButton.title = '译文保存在本机缓存，可另存到其他位置';
     this.saveButton.hidden = this.syncButton.hidden = false;
     app.pdfViewer.currentScaleValue = 'page-width';
     this.originalViewer = source.pdfViewer;
@@ -288,7 +371,8 @@ export class TranslationView {
     const initialLocation = original.location();
     source.pdfViewer.scrollMode = 0;
     source.pdfViewer.spreadMode = 0;
-    source.pdfViewer.currentScaleValue = 'page-width';
+    this.stopScale = this.matchPageScale(source, app);
+    this.alignedScale = source.pdfViewer.currentScale;
     if (initialLocation) original.move(initialLocation, false);
     const pageChanged = () => {
       const page = translated.location()?.page;
@@ -314,6 +398,15 @@ export class TranslationView {
     this.serial++;
     this.win.clearTimeout(this.timer);
     this.stopSync?.();
+    this.stopScale?.();
+    this.resize?.disconnect();
+    if (this.chat) {
+      this.chat.classList.remove('cfz-translation-chat');
+      this.chat
+        .closest('.zotero-view-item-main')
+        ?.style.removeProperty('--cfz-translation-header-height');
+      this.chat.scrollTop = this.chatScroll;
+    }
     this.panel.parentElement?.classList.remove('cfz-translation-tab');
     this.panel.remove();
     if (this.originalSettings) {
@@ -321,7 +414,7 @@ export class TranslationView {
         const { zoom, scroll, spread } = this.originalSettings;
         if (this.originalViewer.scrollMode === 0) this.originalViewer.scrollMode = scroll;
         if (this.originalViewer.spreadMode === 0) this.originalViewer.spreadMode = spread;
-        if (this.originalViewer.currentScaleValue === 'page-width')
+        if (Math.abs(this.originalViewer.currentScale - this.alignedScale) < 0.0001)
           this.originalViewer.currentScaleValue = zoom;
       } catch {}
     }

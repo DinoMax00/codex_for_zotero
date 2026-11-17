@@ -1205,6 +1205,7 @@ class ChatPanel {
       doc: this.doc,
       io: IOUtils,
       cu: Cu,
+      chat: this.root.closest('.zotero-view-item'),
       onClose: () => TRANSLATIONS.delete(tab),
       exportFile: async (source) => {
         const { FilePicker } = ChromeUtils.importESModule(

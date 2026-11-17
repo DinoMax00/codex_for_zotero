@@ -1,14 +1,25 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, mkdir, readFile, rename, rm, stat } from 'node:fs/promises';
+import {
+  chmod,
+  copyFile,
+  link,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rename,
+  rm,
+  stat,
+} from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { CodexRPC } from './rpc.mjs';
 import { atomicJSON } from './store.mjs';
 
 export const TRANSLATION_MODEL = 'gpt-6-luna';
-const CACHE_VERSION = '2';
+const LAYOUT_VERSION = 4;
 const schema = {
   type: 'object',
   properties: {
@@ -168,7 +179,12 @@ async function translateBatch(rpc, cwd, batch, signal) {
       });
     const [, finalText] = await Promise.all([launch, pending]);
     signal.throwIfAborted();
-    return validateTranslation(finalText, batch);
+    try {
+      return validateTranslation(finalText, batch);
+    } catch (error) {
+      error.invalidTranslation = true;
+      throw error;
+    }
   } finally {
     stop?.();
     if (turnId && signal.aborted)
@@ -205,36 +221,94 @@ export class TranslationService {
     if (!info.isFile() || info.size > 250 * 1024 * 1024)
       throw new Error('PDF 文件不可用或超过 250 MB');
     const digest = await sha256(paper.path, signal);
-    return { digest, key, dir: path.join(this.root, key, `${CACHE_VERSION}-${digest}`) };
+    const source = path.parse(paper.path);
+    return {
+      digest,
+      key,
+      dir: path.join(this.root, key, `${LAYOUT_VERSION}-${digest}`),
+      companion: path.join(source.dir, `${source.name}_cn.pdf`),
+    };
   }
-  async finished(dir) {
+  runPython(args, signal) {
+    return python(this.uv, ['run', '--quiet', '--script', this.helper, ...args], signal);
+  }
+  result(file, mapping, storedWithPaper) {
+    return { ...mapping, state: 'complete', model: TRANSLATION_MODEL, path: file, storedWithPaper };
+  }
+  async companionStatus({ companion, digest }) {
     try {
-      const [data, file] = await Promise.all([
+      if (!(await stat(companion)).isFile()) return { occupied: true };
+    } catch (error) {
+      if (error.code === 'ENOENT') return { occupied: false };
+      throw error;
+    }
+    const tmp = await mkdtemp(path.join(os.tmpdir(), 'cfz-translation-map-'));
+    try {
+      const file = path.join(tmp, 'map.json');
+      await this.runPython(['mapping', companion, file]);
+      const mapping = JSON.parse(await readFile(file, 'utf8'));
+      if (mapping?.sourceDigest === digest && mapping.layoutVersion === LAYOUT_VERSION)
+        return { result: this.result(companion, mapping, true), occupied: true };
+      return { occupied: true };
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  }
+  async cached({ dir, digest }) {
+    const file = path.join(dir, '中文译文.pdf');
+    try {
+      const [data, info] = await Promise.all([
         readFile(path.join(dir, 'result.json'), 'utf8'),
-        stat(path.join(dir, '中文译文.pdf')),
+        stat(file),
       ]);
-      if (!file.isFile() || !file.size) return null;
-      return {
-        state: 'complete',
-        model: TRANSLATION_MODEL,
-        path: path.join(dir, '中文译文.pdf'),
-        ...JSON.parse(data),
-      };
+      const map = JSON.parse(data);
+      if (
+        info.isFile() &&
+        info.size &&
+        map.sourceDigest === digest &&
+        map.layoutVersion === LAYOUT_VERSION
+      )
+        return this.result(file, map, false);
+      return null;
     } catch (error) {
       if (error.code === 'ENOENT') return null;
       throw error;
+    }
+  }
+  async storeCompanion(source, companion) {
+    const temp = path.join(path.dirname(companion), `.cfz-translation-${randomUUID()}.tmp`);
+    try {
+      await copyFile(source, temp);
+      await chmod(temp, 0o600);
+      // Publish a complete file without replacing any pre-existing sibling.
+      await link(temp, companion);
+      return true;
+    } catch (error) {
+      if (['EACCES', 'EPERM', 'EROFS', 'ENOTSUP', 'EEXIST'].includes(error.code)) return false;
+      throw error;
+    } finally {
+      await rm(temp, { force: true }).catch(() => {});
     }
   }
   async lookup(paper) {
     const loc = await this.location(paper);
     const running = this.running;
     if (running?.key === loc.key && running.source === paper.path) return this.status(running.id);
-    return (await this.finished(loc.dir)) || { state: 'missing', model: TRANSLATION_MODEL };
+    const companion = await this.companionStatus(loc);
+    return (
+      companion.result || (await this.cached(loc)) || { state: 'missing', model: TRANSLATION_MODEL }
+    );
   }
   async start(paper) {
     const loc = await this.location(paper);
-    const cached = await this.finished(loc.dir);
+    const companion = await this.companionStatus(loc);
+    if (companion.result) return companion.result;
+    const cached = await this.cached(loc);
     if (cached) return cached;
+    if (companion.occupied)
+      throw new Error(
+        '同目录已有 _cn.pdf，当前版本无法确认它对应这份原文。移开该文件后可以重新生成。',
+      );
     if (this.running) {
       if (loc.key === this.running.key && this.running.source === paper.path)
         return this.status(this.running.id);
@@ -277,17 +351,18 @@ export class TranslationService {
     this.running?.abort.abort();
     this.running?.rpc?.close();
   }
-  async run(job, { dir, digest }) {
+  async run(job, loc) {
+    const { dir, digest, companion } = loc;
     const signal = job.abort.signal;
     await mkdir(dir, { recursive: true, mode: 0o700 });
     const source = path.join(dir, 'source.tmp.pdf');
     const planFile = path.join(dir, 'plan.json');
     const checkpoint = path.join(dir, 'checkpoint.json');
+    const retained = path.join(dir, 'translated-segments.json');
     const output = path.join(dir, 'output.tmp.pdf');
     const resultFile = path.join(dir, 'result.tmp.json');
     const translationFile = path.join(dir, 'translation.tmp.json');
-    const runPython = (...args) =>
-      python(this.uv, ['run', '--quiet', '--script', this.helper, ...args], signal);
+    const runPython = (...args) => this.runPython(args, signal);
     let rpc;
     try {
       await copyFile(job.source, source);
@@ -296,10 +371,12 @@ export class TranslationService {
       const plan = JSON.parse(await readFile(planFile, 'utf8'));
       const all = batches(plan.pages.flatMap((page) => page.units));
       const done = Object.create(null);
-      try {
-        Object.assign(done, JSON.parse(await readFile(checkpoint, 'utf8')));
-      } catch (error) {
-        if (error.code !== 'ENOENT') throw error;
+      for (const file of [retained, checkpoint]) {
+        try {
+          Object.assign(done, JSON.parse(await readFile(file, 'utf8')));
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+        }
       }
       job.state = 'translating';
       job.total = all.length;
@@ -318,11 +395,25 @@ export class TranslationService {
         const listing = await rpc.call('model/list', { includeHidden: false, limit: 100 });
         if (!listing.data.some((m) => m.model === TRANSLATION_MODEL))
           throw new Error('本机 Codex 未提供 GPT-6-Luna，未改用其他模型');
-        for (const batch of all) {
-          if (batch.every(({ id }) => !!done[id])) continue;
-          const data = await translateBatch(rpc, dir, batch, signal);
+        const saveBatch = async (batch) => {
+          const missing = batch.filter(({ id }) => !done[id]);
+          if (!missing.length) return;
+          let data;
+          try {
+            data = await translateBatch(rpc, dir, missing, signal);
+          } catch (error) {
+            if (!error.invalidTranslation || missing.length === 1) throw error;
+            const middle = Math.ceil(missing.length / 2);
+            await saveBatch(missing.slice(0, middle));
+            await saveBatch(missing.slice(middle));
+            return;
+          }
           Object.assign(done, data);
           await atomicJSON(checkpoint, done);
+        };
+        for (const batch of all) {
+          if (batch.every(({ id }) => !!done[id])) continue;
+          await saveBatch(batch);
           job.done++;
         }
       }
@@ -334,9 +425,24 @@ export class TranslationService {
       await atomicJSON(translationFile, translated);
       await runPython('render', source, planFile, translationFile, output, resultFile);
       signal.throwIfAborted();
-      await rename(output, path.join(dir, '中文译文.pdf'));
-      await rename(resultFile, path.join(dir, 'result.json'));
-      Object.assign(job, await this.finished(dir));
+      const map = JSON.parse(await readFile(resultFile, 'utf8'));
+      if (map.layoutVersion !== LAYOUT_VERSION || map.sourceDigest !== digest)
+        throw new Error('译文 PDF 的排版版本或原文指纹不匹配');
+      await atomicJSON(retained, done);
+      const storedWithPaper = await this.storeCompanion(output, companion);
+      if (!storedWithPaper) {
+        await rename(output, path.join(dir, '中文译文.pdf'));
+        await rename(resultFile, path.join(dir, 'result.json'));
+      }
+      Object.assign(
+        job,
+        this.result(
+          storedWithPaper ? companion : path.join(dir, '中文译文.pdf'),
+          map,
+          storedWithPaper,
+        ),
+      );
+      // Retain finished text so future layout revisions can rebuild without another model call.
       await rm(checkpoint, { force: true });
     } finally {
       rpc?.close();

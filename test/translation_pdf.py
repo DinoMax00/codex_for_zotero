@@ -48,6 +48,44 @@ class TranslationPDF(unittest.TestCase):
                 self.assertEqual(result["pages"][1]["source"], 0)
                 self.assertIn("必须完整保留", doc[1].get_text())
 
+    def test_wrapped_paragraph_stays_out_of_figure_and_exports_reusable_mapping(self):
+        with TemporaryDirectory() as folder, fitz.open() as doc:
+            folder = Path(folder)
+            original, plan, translations, target, mapping = [folder / name for name in
+                ("source.pdf", "plan.json", "translations.json", "source_cn.pdf", "map.json")]
+            page = doc.new_page(width=480, height=620)
+            figure = fitz.Rect(248, 56, 430, 153)
+            page.draw_rect(figure, fill=(0.70, 0.78, 0.91), color=(0.2, 0.3, 0.4))
+            page.insert_text((275, 90), "Figure artwork label", fontsize=10)
+            for i, text in enumerate(("The demonstration is recorded", "next to the figure and continues", "with the same controller in a much wider paragraph below.")):
+                page.insert_text((35, 130 + i * 17.5), text, fontsize=11)
+            background = fitz.Rect(30, 250, 440, 321)
+            page.draw_rect(background, fill=(0.96, 0.97, 0.98), color=None)
+            page.insert_text((44, 278), "This abstract has a pale background.", fontsize=11)
+            doc.save(original)
+            PDF.extract(original, plan)
+            units = PDF.read_json(plan)["pages"][0]["units"]
+            self.assertEqual(len(units), 3)
+            self.assertTrue(all(not PDF.intersects(fitz.Rect(unit["box"]), figure) for unit in units))
+            chinese = ["演示数据记录在插图旁。", "正文随后在更宽的区域继续。", "摘要采用浅色背景。"]
+            PDF.write_json(translations, dict(zip((unit["id"] for unit in units), chinese)))
+            PDF.render(original, plan, translations, target, mapping)
+            result = PDF.read_json(mapping)
+            PDF.read_mapping(target, folder / "reopened.json")
+            self.assertEqual(PDF.read_json(folder / "reopened.json"), result)
+            self.assertEqual(result["sourceDigest"], PDF.source_digest(original))
+            with fitz.open(target) as translated:
+                self.assertEqual(len(translated), 1)
+                self.assertEqual(translated[0].rect, page.rect)
+                self.assertIn("Figure artwork label", translated[0].get_text())
+                spans = [span for block in translated[0].get_text("dict")["blocks"] if block["type"] == 0
+                         for line in block["lines"] for span in line["spans"]]
+                for text in chinese:
+                    matches = [span for span in spans if text in span["text"]]
+                    self.assertEqual(len(matches), 1)
+                    self.assertGreater(matches[0]["size"], 11)
+                    self.assertFalse(PDF.intersects(fitz.Rect(matches[0]["bbox"]), figure))
+
 
 if __name__ == "__main__":
     unittest.main()
