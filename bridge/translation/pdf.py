@@ -32,11 +32,13 @@ def font():
                   "/Library/Fonts/Kaiti.ttc",
                   str(Path.home() / "Library/Fonts/LXGWWenKai-Regular.ttf")]
     for candidate in candidates:
+        if not Path(candidate).is_file():
+            continue
         try:
             face = fitz.Font(fontfile=candidate)
             if all(face.has_glyph(ord(c)) for c in "论文译文阅读简体中文"):
                 return face
-        except (OSError, ValueError, RuntimeError):
+        except (OSError, ValueError, RuntimeError, fitz.mupdf.FzErrorBase):
             continue
     return fitz.Font("china-s")
 

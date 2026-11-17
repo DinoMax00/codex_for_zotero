@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.8.1
+## 0.8.2
 
 - Typeset translated text in KaiTi when available, with larger type and collision checks for original figures and adjacent columns.
 - Align the three headers and synchronize PDF page height and zoom.
